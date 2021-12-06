@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.distributions import MultivariateNormal
 import gym
 import numpy as np
+import json
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -155,6 +156,7 @@ def main():
     betas = (0.9, 0.999)
     
     random_seed = None
+    log_dir = 'data/'
     #############################################
     
     # creating environment
@@ -173,10 +175,11 @@ def main():
     print(lr,betas)
     
     # logging variables
-    running_reward = 0
     avg_length = 0
     time_step = 0
-    
+    running_reward = 0
+    running_cost = 0
+    log = {'time_step':[], 'avg_length': [], 'running_reward': [], 'running_cost': []}
     # training loop
     for i_episode in range(1, max_episodes+1):
         state = env.reset()
@@ -184,8 +187,8 @@ def main():
             time_step +=1
             # Running policy_old:
             action = ppo.select_action(state, memory)
-            state, reward, done, _ = env.step(action)
-            
+            state, reward, done, info = env.step(action)
+
             # Saving reward and is_terminals:
             memory.rewards.append(reward)
             memory.is_terminals.append(done)
@@ -194,8 +197,8 @@ def main():
             if time_step % update_timestep == 0:
                 ppo.update(memory)
                 memory.clear_memory()
-                time_step = 0
             running_reward += reward
+            running_cost += info['cost']
             if render:
                 env.render()
             if done:
@@ -211,9 +214,16 @@ def main():
         if i_episode % log_interval == 0:
             avg_length = int(avg_length/log_interval)
             running_reward = int((running_reward/log_interval))
-            
-            print('Episode {} \t Avg length: {} \t Avg reward: {}'.format(i_episode, avg_length, running_reward))
+            running_cost = int((running_cost/log_interval))
+            log['time_step'].append(time_step)
+            log['avg_length'].append(avg_length)
+            log['running_reward'].append(running_reward)
+            log['running_cost'].append(running_cost)
+            json.dump(log, open(log_dir + f"{env_name}_ppo.json", 'w'))
+
+            print('Episode {} \t Avg length: {} \t Avg reward: {} \t Avg cost: {}'.format(i_episode, avg_length, running_reward, running_cost))
             running_reward = 0
+            running_cost = 0
             avg_length = 0
             
 if __name__ == '__main__':
