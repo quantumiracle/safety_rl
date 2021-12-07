@@ -143,7 +143,7 @@ def main():
     render = False
     solved_reward = 300         # stop training if avg_reward > solved_reward
     log_interval = 20           # print avg reward in the interval
-    max_episodes = 10000        # max training episodes
+    max_episodes = 1000000        # max training episodes
     max_timesteps = 1000        # max timesteps in one episode
     
     update_timestep = 500      # update policy every n timesteps
