@@ -46,13 +46,13 @@ GAMMA = 0.99  # reward discount
 A_LR = 0.0001  # learning rate for actor
 C_LR = 0.0002  # learning rate for critic
 BATCH = 4096  # update batchsize
-A_UPDATE_STEPS = 50  # actor update steps
-C_UPDATE_STEPS = 50  # critic update steps
-HIDDEN_DIM = 128
+A_UPDATE_STEPS = 20  # actor update steps
+C_UPDATE_STEPS = 20  # critic update steps
+HIDDEN_DIM = 256
 EPS = 1e-8  # numerical residual
 MODEL_PATH = f'./data/mp_safe_PPO_continuous_{ENV_NAME}'
 LOG_PATH = f'./data/{ENV_NAME}_mp_safe_ppo.json'
-LOG_INTERVAL = 20000 # steps
+LOG_INTERVAL = 2 # steps
 NUM_WORKERS=2  # or: mp.cpu_count()
 ACTION_RANGE = 1.  # normalized action range should be 1.
 METHOD = [
@@ -311,7 +311,7 @@ def worker(id, ppo, queues):
 
     for ep in range(EP_MAX):
         s = env.reset()
-        buffer_s, buffer_a, buffer_r, buffer_c = [], [], []
+        buffer_s, buffer_a, buffer_r, buffer_c = [], [], [], []
         ep_r = 0
         ep_c = 0
         t0 = time.time()
@@ -345,7 +345,7 @@ def worker(id, ppo, queues):
                 target_v.reverse()
                 bs = buffer_s if len(buffer_s[0].shape)>1 else np.vstack(buffer_s) # no vstack for raw-pixel input
                 ba, br = np.vstack(buffer_a), np.array(target_v)[:, np.newaxis]
-                buffer_s, buffer_a, buffer_r = [], [], []
+                buffer_s, buffer_a, buffer_r, buffer_c = [], [], [], []
                 ppo.update(bs, ba, br)
 
             if done:
