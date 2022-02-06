@@ -41,19 +41,19 @@ ENV_NAME = 'Safexp-PointGoal1-v0'  # environment name: LunarLander-v2, Pendulum-
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000000  # total number of episodes for training
-EP_LEN = 1000  # total number of steps for each episode
+EP_LEN = 10000  # total number of steps for each episode
 GAMMA = 0.99  # reward discount
-A_LR = 0.0001  # learning rate for actor
-C_LR = 0.0002  # learning rate for critic
-BATCH = 4096  # update batchsize
-A_UPDATE_STEPS = 20  # actor update steps
-C_UPDATE_STEPS = 20  # critic update steps
+A_LR = 1e-4  # learning rate for actor
+C_LR = 1e-4  # learning rate for critic
+BATCH = 9192  # update batchsize
+A_UPDATE_STEPS = 50  # actor update steps
+C_UPDATE_STEPS = 50  # critic update steps
 HIDDEN_DIM = 256
 EPS = 1e-8  # numerical residual
 MODEL_PATH = f'./data/mp_safe_PPO_continuous_{ENV_NAME}'
 LOG_PATH = f'./data/{ENV_NAME}_mp_safe_ppo.json'
 LOG_INTERVAL = 2 # steps
-NUM_WORKERS=2  # or: mp.cpu_count()
+NUM_WORKERS=3  # or: mp.cpu_count()
 ACTION_RANGE = 1.  # normalized action range should be 1.
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
@@ -81,14 +81,14 @@ class ValueNetwork(nn.Module):
         
         self.linear1 = nn.Linear(state_dim, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        # self.linear3 = nn.Linear(hidden_dim, hidden_dim)
+        self.linear3 = nn.Linear(hidden_dim, hidden_dim)
         self.linear4 = nn.Linear(hidden_dim, 1)
 
         
     def forward(self, state):
-        x = F.tanh(self.linear1(state))
-        x = F.tanh(self.linear2(x))
-        # x = F.relu(self.linear3(x))
+        x = F.relu(self.linear1(state))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
         x = self.linear4(x)
         return x
         
@@ -115,9 +115,9 @@ class PolicyNetwork(nn.Module):
 
         
     def forward(self, state):
-        x = F.tanh(self.linear1(state))
-        x = F.tanh(self.linear2(x))
-        x = F.tanh(self.linear3(x))
+        x = F.relu(self.linear1(state))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
         # x = F.relu(self.linear4(x))
 
         mean    = self.action_range * F.tanh(self.mean_linear(x))
@@ -303,55 +303,62 @@ def ShareParameters(adamoptim):
             state['exp_avg'].share_memory_()
             state['exp_avg_sq'].share_memory_()
 
-def worker(id, ppo, queues):
+def worker(id, ppo, queues, eval=False):
     env = gym.make(ENV_NAME)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     [rewards_queue, costs_queue, lengths_queue] = queues
+    total_t = 0
+    buffer_s, buffer_a, buffer_r, buffer_c, buffer_d = [], [], [], [], []
 
     for ep in range(EP_MAX):
         s = env.reset()
-        buffer_s, buffer_a, buffer_r, buffer_c = [], [], [], []
         ep_r = 0
         ep_c = 0
         t0 = time.time()
         for t in range(EP_LEN):  # in one episode
             # env.render()
+            total_t += 1
             a = ppo.choose_action(s)
             s_, r, done, info = env.step(a)
             c = info['cost']
-            buffer_s.append(s)
-            buffer_a.append(a)
-            buffer_r.append(r)
-            buffer_c.append(c)
+            if not eval:
+                buffer_s.append(s)
+                buffer_a.append(a)
+                buffer_r.append(r)
+                buffer_c.append(c)
+                buffer_d.append(done)
+
             s = s_
             ep_r += r
             ep_c += c
             # update ppo
-            if (t+1) % BATCH == 0 or t == EP_LEN - 1 or done:
+            # if (t+1) % BATCH == 0 or t == EP_LEN - 1 or done:
+            if not eval and (total_t+1) % BATCH == 0:
                 if done:
                     v_s_ = 0
                 else:
-                    v_s_ = ppo.critic(torch.Tensor([s_]).to(device)).cpu().detach().numpy()[0, 0]
+                    # v_s_ = ppo.critic(torch.Tensor(np.array([s_])).to(device)).cpu().detach().numpy()[0, 0]
+                    v_s_ = 0
                 target_v = []
-                for r, c in zip(buffer_r[::-1], buffer_c[::-1]):
-                    v_s_pos = max(0, r) + GAMMA * v_s_  # standard rl with positive r
+                for r, c, d in zip(buffer_r[::-1], buffer_c[::-1], buffer_d[::-1]):
+                    v_s_pos = max(0, r) + GAMMA * v_s_ * (1-d)  # standard rl with positive r
                     # below is safe rl
                     v_a = min(c, v_s_)
-                    v_s = v_s_pos if v_a > 0 else v_a
+                    v_s = v_s_pos if v_a >= 0 else v_a
                     v_s_ = v_s
                     target_v.append(v_s_)
 
                 target_v.reverse()
                 bs = buffer_s if len(buffer_s[0].shape)>1 else np.vstack(buffer_s) # no vstack for raw-pixel input
                 ba, br = np.vstack(buffer_a), np.array(target_v)[:, np.newaxis]
-                buffer_s, buffer_a, buffer_r, buffer_c = [], [], [], []
+                buffer_s, buffer_a, buffer_r, buffer_c, buffer_d = [], [], [], [], []
                 ppo.update(bs, ba, br)
 
             if done:
                 break
 
-        if ep%50==0:
+        if not eval and ep%50==0:
             ppo.save_model(MODEL_PATH)
         # print(
         #     'Episode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'.format(
@@ -398,7 +405,10 @@ def main():
         rewards=[]
 
         for i in range(NUM_WORKERS):
-            process = Process(target=worker, args=(i, ppo, queues))  # the args contain shared and not shared
+            if i == 0:  # one evaluate process
+                process = Process(target=worker, args=(i, ppo, queues, True))
+            else:   # others are training process
+                process = Process(target=worker, args=(i, ppo, queues, False))  # the args contain shared and not shared            process.daemon=True  # all processes closed when the main stops
             process.daemon=True  # all processes closed when the main stops
             processes.append(process)
 
