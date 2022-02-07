@@ -331,7 +331,6 @@ def worker(id, ppo, queues, eval=False):
             ep_r += r
             ep_c += info['cost']
             # update ppo
-            # if not eval and ((t+1) % BATCH == 0 or t == EP_LEN - 1 or done):
             if not eval and (total_t+1) % BATCH == 0:
                 if done:
                     v_s_ = 0
