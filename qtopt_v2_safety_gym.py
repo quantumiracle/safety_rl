@@ -2,11 +2,14 @@ import safety_gym
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
+import torch.nn.functional as F
 import gym
 import torch.optim as optim
 import random
 import numpy as np
 import json
+from IPython.display import clear_output
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -83,9 +86,7 @@ class CEM():
 
     def update(self, selected_samples):
         self.mean = np.mean(selected_samples, axis = 0)
-        # print('mean: ', self.mean)
         self.std = np.std(selected_samples, axis = 0) # plus the entropy offset, or else easily get 0 std
-        # print('mean std: ', np.mean(self.std))
 
         return self.mean, self.std
 
@@ -227,23 +228,28 @@ class QT_Opt():
         self.target_qnet1.eval()
         self.target_qnet2.eval()
 
+def plot(rewards):
+    clear_output(True)
+    plt.figure(figsize=(20,5))
+    # plt.subplot(131)
+    plt.plot(rewards)
+    plt.savefig('qt_opt_v2.png')
+    # plt.show()
         
 def main():
     ############## Hyperparameters ##############
     env_name = "Safexp-PointGoal1-v0"
     render = False
-    solved_reward = 300         # stop training if avg_reward > solved_reward
     log_interval = 20           # print avg reward in the interval
     max_episodes = 1000000        # max training episodes
     max_timesteps = 1000        # max timesteps in one episode
-    
+    batch_size = 128
     update_timestep = 500      # update policy every n timesteps
     hidden_dim = 512
     lr = 0.0003                 # parameters for Adam optimizer
-    betas = (0.9, 0.999)
-    
     random_seed = None
-    log_dir = 'data/'
+    data_path = f'./data/qtopt_{env_name}'
+    log_path = f'./data/{env_name}_qtopt.json'
     #############################################
     
     # creating environment
@@ -259,8 +265,7 @@ def main():
     
     replay_buffer_size = 5e5
     replay_buffer = ReplayBuffer(replay_buffer_size)
-    model = QT_Opt(replay_buffer, hidden_dim)
-    print(lr,betas)
+    model = QT_Opt(state_dim, action_dim, hidden_dim, replay_buffer, lr)
     
     # logging variables
     avg_length = 0
@@ -274,17 +279,16 @@ def main():
         for t in range(max_timesteps):
             time_step +=1
             # Running policy_old:
-            action = model.select_action(state, memory)
-            state, reward, done, info = env.step(action)
+            action = model.cem_optimal_action(state)
+            next_state, reward, done, info = env.step(action)
 
-            # Saving reward and is_terminals:
-            memory.rewards.append(reward)
-            memory.is_terminals.append(done)
-            
+            replay_buffer.push(state, action, reward, next_state, done)
+            state = next_state
+
             # update if its time
-            if time_step % update_timestep == 0:
-                model.update(memory)
-                memory.clear_memory()
+            if time_step % update_timestep == 0 and len(replay_buffer) > batch_size:
+                model.update(batch_size)
+                model.save_model(data_path)
             running_reward += reward
             running_cost += info['cost']
             if render:
@@ -294,10 +298,6 @@ def main():
         
         avg_length += t
         
-        # save every 500 episodes
-        if i_episode % 500 == 0:
-            torch.save(ppo.policy.state_dict(), './data/PPO_continuous_{}.pth'.format(env_name))
-            
         # logging
         if i_episode % log_interval == 0:
             avg_length = int(avg_length/log_interval)
@@ -307,13 +307,16 @@ def main():
             log['avg_length'].append(avg_length)
             log['running_reward'].append(running_reward)
             log['running_cost'].append(running_cost)
-            json.dump(log, open(log_dir + f"{env_name}_ppo.json", 'w'))
+            json.dump(log, open(log_path, 'w'))
 
-            print('Episode {} \t Avg length: {} \t Avg reward: {} \t Avg cost: {}'.format(i_episode, avg_length, running_reward, running_cost))
+            print('Episode {} \t Avg length: {} \t Avg reward: {%.3f} \t Avg cost: {}'.format(i_episode, avg_length, running_reward, running_cost))
             running_reward = 0
             running_cost = 0
             avg_length = 0
             
+        if i_episode% 10==0:
+            plot(running_reward)
+
 if __name__ == '__main__':
     main()
     

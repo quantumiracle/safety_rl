@@ -321,7 +321,7 @@ def worker(id, ppo, queues, eval=False):
             total_t += 1
             a = ppo.choose_action(s)
             s_, r, done, info = env.step(a)
-            c = info['cost']
+            c = -info['cost'] # cost is positive, take a minus to make it negative
             if not eval:
                 buffer_s.append(s)
                 buffer_a.append(a)
@@ -434,7 +434,7 @@ def main():
                 running_reward = np.mean(log['running_reward'][-LOG_INTERVAL:])
                 running_cost = np.mean(log['running_cost'][-LOG_INTERVAL:])
                 
-                print('Frames {} \t Avg length: {} \t Avg reward: {} \t Avg cost: {}'\
+                print('Frames {} \t Avg length: {} \t Avg reward: {%.3f} \t Avg cost: {}'\
                     .format(cnt, avg_length, running_reward, running_cost))
 
             # if len(rewards)%20==0 and len(rewards)>0:
