@@ -309,7 +309,7 @@ def main():
             log['running_cost'].append(running_cost)
             json.dump(log, open(log_path, 'w'))
 
-            print('Episode {} \t Avg length: {} \t Avg reward: {%.3f} \t Avg cost: {}'.format(i_episode, avg_length, running_reward, running_cost))
+            print('Episode {} \t Avg length: {} \t Avg reward: {:.3f} \t Avg cost: {}'.format(i_episode, avg_length, running_reward, running_cost))
             running_reward = 0
             running_cost = 0
             avg_length = 0

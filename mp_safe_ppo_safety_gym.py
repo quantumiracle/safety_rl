@@ -40,9 +40,10 @@ args = parser.parse_args()
 ENV_NAME = 'Safexp-PointGoal1-v0'  # environment name: LunarLander-v2, Pendulum-v0
 RANDOMSEED = 2  # random seed
 
-EP_MAX = 1000000  # total number of episodes for training
+EP_MAX = 5000000  # total number of episodes for training
 EP_LEN = 10000  # total number of steps for each episode
 GAMMA = 0.99  # reward discount
+GAMMA_A = 0.9
 A_LR = 1e-4  # learning rate for actor
 C_LR = 1e-4  # learning rate for critic
 BATCH = 9192  # update batchsize
@@ -342,7 +343,7 @@ def worker(id, ppo, queues, eval=False):
                 for r, c, d in zip(buffer_r[::-1], buffer_c[::-1], buffer_d[::-1]):
                     v_s_pos = max(0, r) + GAMMA * v_s_ * (1-d)  # standard rl with positive r
                     # below is safe rl
-                    v_a = min(c, v_s_)
+                    v_a = min(c, GAMMA_A*v_s_)
                     v_s = v_s_pos if v_a >= 0 else v_a
                     v_s_ = v_s
                     target_v.append(v_s_)
@@ -434,7 +435,7 @@ def main():
                 running_reward = np.mean(log['running_reward'][-LOG_INTERVAL:])
                 running_cost = np.mean(log['running_cost'][-LOG_INTERVAL:])
                 
-                print('Frames {} \t Avg length: {} \t Avg reward: {%.3f} \t Avg cost: {}'\
+                print('Frames {} \t Avg length: {} \t Avg reward: {:.3f} \t Avg cost: {}'\
                     .format(cnt, avg_length, running_reward, running_cost))
 
             # if len(rewards)%20==0 and len(rewards)>0:
