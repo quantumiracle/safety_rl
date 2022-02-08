@@ -37,7 +37,7 @@ parser.add_argument('--test', dest='test', action='store_true', default=False)
 
 args = parser.parse_args()
 
-ENV_NAME = 'Safexp-PointGoal2-v0'  # environment name: LunarLander-v2, Pendulum-v0
+ENV_NAME = 'Safexp-PointGoal1-v0'  # environment name: LunarLander-v2, Pendulum-v0
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000000  # total number of episodes for training
@@ -86,9 +86,9 @@ class ValueNetwork(nn.Module):
 
         
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
+        x = F.tanh(self.linear1(state))
+        x = F.tanh(self.linear2(x))
+        x = F.tanh(self.linear3(x))
         x = self.linear4(x)
         return x
         
@@ -115,9 +115,9 @@ class PolicyNetwork(nn.Module):
 
         
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
+        x = F.tanh(self.linear1(state))
+        x = F.tanh(self.linear2(x))
+        x = F.tanh(self.linear3(x))
         # x = F.relu(self.linear4(x))
 
         mean    = self.action_range * F.tanh(self.mean_linear(x))
@@ -235,7 +235,7 @@ class PPO(object):
             mean, std = self.actor(s)
             pi = torch.distributions.Normal(mean, std)
             adv = r - self.critic(s)
-        # adv = (adv - adv.mean())/(adv.std()+1e-6)  #  choose reward normalizaiton above or advantage normalization here
+        adv = (adv - adv.mean())/(adv.std()+1e-6)  #  choose reward normalizaiton above or advantage normalization here
 
         # update actor
         if METHOD['name'] == 'kl_pen':

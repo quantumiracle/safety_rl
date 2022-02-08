@@ -53,7 +53,7 @@ EPS = 1e-8  # numerical residual
 MODEL_PATH = f'./data/mp_safe_PPO_continuous_{ENV_NAME}'
 LOG_PATH = f'./data/{ENV_NAME}_mp_safe_ppo.json'
 LOG_INTERVAL = 2 # steps
-NUM_WORKERS=3  # or: mp.cpu_count()
+NUM_WORKERS=1  # or: mp.cpu_count()
 ACTION_RANGE = 1.  # normalized action range should be 1.
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
@@ -321,7 +321,7 @@ def worker(id, ppo, queues, eval=False):
             total_t += 1
             a = ppo.choose_action(s)
             s_, r, done, info = env.step(a)
-            c = info['cost']
+            c = -info['cost'] # cost is positive, take a minus to make it negative
             if not eval:
                 buffer_s.append(s)
                 buffer_a.append(a)
