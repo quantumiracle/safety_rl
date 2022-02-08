@@ -434,7 +434,7 @@ def main():
                 running_reward = np.mean(log['running_reward'][-LOG_INTERVAL:])
                 running_cost = np.mean(log['running_cost'][-LOG_INTERVAL:])
                 
-                print('Frames {} \t Avg length: {} \t Avg reward: {} \t Avg cost: {}'\
+                print('Frames {} \t Avg length: {} \t Avg reward: {%.3f} \t Avg cost: {}'\
                     .format(cnt, avg_length, running_reward, running_cost))
 
             # if len(rewards)%20==0 and len(rewards)>0:
