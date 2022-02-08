@@ -333,13 +333,11 @@ def worker(id, ppo, queues, eval=False):
             ep_r += r
             ep_c += c
             # update ppo
-            # if (t+1) % BATCH == 0 or t == EP_LEN - 1 or done:
             if not eval and (total_t+1) % BATCH == 0:
                 if done:
                     v_s_ = 0
                 else:
-                    # v_s_ = ppo.critic(torch.Tensor(np.array([s_])).to(device)).cpu().detach().numpy()[0, 0]
-                    v_s_ = 0
+                    v_s_ = ppo.critic(torch.Tensor(np.array([s_])).to(device)).cpu().detach().numpy()[0, 0]
                 target_v = []
                 for r, c, d in zip(buffer_r[::-1], buffer_c[::-1], buffer_d[::-1]):
                     v_s_pos = max(0, r) + GAMMA * v_s_ * (1-d)  # standard rl with positive r
